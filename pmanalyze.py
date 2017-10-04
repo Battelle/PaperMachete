@@ -1,102 +1,170 @@
 import sys
-import struct
-import binaryninja as binja
-from os.path import basename
-from os.path import abspath
+import json
+from struct import pack, unpack
+from os.path import basename, join
+from operator import attrgetter
 from collections import defaultdict
+import binaryninja as binja
 
-## Resulting Graql file targets Grakn v0.16.0
-
-WRITE = True
-gqlFile = None
-insn_list = None
-func_name =''
+PM = None
 vars_and_sizes = {}
+
+class PaperMachete():
+    def __init__(self):
+        self.functions = []
+
+class PMFunction(): 
+    def __init__(self, func_name, asm_addr):
+        self.func_name = func_name
+        self.asm_addr = asm_addr
+        self.basic_blocks = []
+        self.bb_edges = []
+
+class PMBasicBlock():
+    def __init__(self, bb_name, bb_start, bb_end):
+        self.bb_name = bb_name
+        self.bb_start = bb_start
+        self.bb_end = bb_end - 1 # set end as last il index (not +1 like binja gives us)
+        self.instructions = []
+
+class PMInstruction():
+    def __init__(self, name, il_index, asm_address, operation_type, in_bb):
+        self.name = name
+        self.il_index = il_index
+        self.asm_address = asm_address
+        self.operation_type = operation_type
+        self.in_bb = in_bb
+        self.nodes = []
+
+class PMOperation():
+    def __init__(self, name, depth, node_type, edge_label, parent_hash):
+        self.name = name
+        self.depth = depth
+        self.node_type = node_type
+        self.edge_label = edge_label
+        self.parent_hash = parent_hash
+
+class PMNodeList():
+    def __init__(self, name, depth, node_type, edge_label, parent_hash, list_size):
+        self.name = name
+        self.depth = depth
+        self.node_type = node_type
+        self.edge_label = edge_label
+        self.parent_hash = parent_hash
+        self.list_size = list_size
+
+class PMEndNodeConstant():
+    def __init__(self, name, depth, node_type, edge_label, parent_hash, constant_value):
+        self.name = name
+        self.depth = depth
+        self.node_type = node_type
+        self.edge_label = edge_label
+        self.parent_hash = parent_hash
+        self.constant_value = constant_value
+
+class PMEndNodeVarSSA():
+    def __init__(self, name, depth, node_type, edge_label, parent_hash, var, version, var_type, var_size, var_func):
+        self.name = name
+        self.depth = depth
+        self.node_type = node_type
+        self.edge_label = edge_label
+        self.parent_hash = parent_hash
+        self.var = var
+        self.version = version
+        self.var_type = var_type
+        self.var_size = var_size
+        self.var_func = var_func
+
+class PMEndNodeVariable():
+    def __init__(self, name, depth, node_type, edge_label, parent_hash, var, var_type, var_size, var_func):
+        self.name = name
+        self.depth = depth
+        self.node_type = node_type
+        self.edge_label = edge_label
+        self.parent_hash = parent_hash
+        self.var = var
+        self.var_type = var_type
+        self.var_size = var_size
+        self.var_func = var_func
+
+class PMBBEdge():
+    def __init__(self, source, target):
+        self.source = source
+        self.target = target
+
 
 def process_function(func):
     global insn_list
-    insn_list = []
-    
-    # Reset dict with variables and sizes
     global vars_and_sizes
+
+    insn_list = []
     vars_and_sizes = {}
-    
-    func_name = func.name.replace('.', '_')
-    asm_addr = hex(func.start).strip('L')
+
     stack = str(binja.function.Function.stack_layout.__get__(func))
     vars_and_sizes = get_variable_sizes(stack)
 
-    print("Proccessing function: {}").format(func.name)
+    func_name = func.name.replace('.', '_')
+    asm_addr = hex(func.start).strip('L')
 
-# Print vars and sizes for debugging
-# for key, value in vars_and_sizes.items():
-#       print ("Var: {} Size: {}".format(key, value))
-
-    gql  = "\ninsert \n"
-    gql += "$func_{0} isa function, has name \"{0}\", has asm-address \"{1}\", has stack \"{2}\"; \n".format(func_name, asm_addr, stack)
- 
-    if WRITE: gqlFile.write(gql)
+    PM.functions.append(PMFunction(func_name, asm_addr))
 
 
 def process_basic_block(func, block):
     func_name = func.name.replace('.', '_')
+    bb_name = "bb_{}_{}_{}".format(block.start, block.end-1, func_name)
 
-    gql  = "\nmatch \n"
-    gql += "$func_{0} isa function, has name \"{0}\"; \n".format(func_name)
-    gql += "\ninsert \n"
-    gql += "$bb isa basic-block, has bb-start {}, has bb-end {}; \n".format(block.start, block.end-1)
-    gql += "(contains-basic-block: $bb, in-function: $func_{}) isa has-basic-block; \n".format(func_name)
-    
-    if WRITE: gqlFile.write(gql)
+    for func in PM.functions:
+        if func.func_name == func_name:
+            func.basic_blocks.append(PMBasicBlock(bb_name, block.start, block.end))
 
 
 def process_instruction(func, block, insn):
+    global insn_list
+
     func_name = func.name.replace('.', '_')
 
     # A single ISA instruction can map to many IL instructions.
     # This can cause the same instruction to be processed many times.
     # To avoid this, we track instructions in a function and only
-    # process them once. We'll still catch all IL instructions.
-    if insn.address not in insn_list:
-        gql  = "\nmatch \n"
-        gql += "$func_{0} isa function, has name \"{0}\"; \n".format(func_name)
-        gql += "$bb isa basic-block, has bb-start {}, has bb-end {}; \n".format(block.start, block.end-1)
-        gql += "(in-function: $func_{}, contains-basic-block: $bb) isa has-basic-block; \n".format(func_name)
+    # process them once. We clear this global list in process_function().
 
-        print("")
-        print("=" * 50)
-
-        if WRITE: gqlFile.write(gql)
-
+    # To complicate this more, MLIL_GOTO operations always seem to have
+    # address => 0x0. So we have to process 0x0 addresses multiple times until
+    # this behavior changes in Binary Ninja (this may actually be expected).
+    
+    if (insn.address not in insn_list) or (insn.address == 0x0):
         ast_parse([func, block, insn])
         insn_list.append(insn.address)
 
+    # sort the 'nodes' list in each instruction by 'depth'
+    # This is extremely important for Grakn's migration template
+    # since nodes at depth 1 need to exist before nodes at depth
+    # 2 can be linked to them (and so on).
+    
+    for func in PM.functions:
+        for bb in func.basic_blocks:
+            for inst in bb.instructions:
+                (inst.nodes).sort(key=attrgetter('depth'))
 
-def ast_write_gql(args, name, il, level=0, edge=""):
+
+def ast_build_json(args, name, il, level=0, edge=""):
+    global insn_list
+    global vars_and_sizes
+
     func  = args[0]
     block = args[1]
     insn  = args[2]
-
-    ## AST TYPE KEY
-    # I : Instruction
-    # O : Operation
-    # E : End (terminating) node
-    # EC: End node - constant
-    # ES: End node - SSA variable
-    # EV: End noce - variable
-
-    gql = ""
-    et = ""
 
     func_name = func.name.replace('.', '_')
 
     # slice off the last "_#" and rejoin to get the parent reference hash
     parent = "_".join(name.split('_')[:-1])
 
-    # Hashes of instruction nodes in the AST look like: "N_8735918103813_4195908c"
-    # One element down from an instruction will look like: "N_8735918103813_4195908c_0"
+    # Hashes of instruction nodes in the AST look like: "N_8735918103813_4195908"
+    # One element down from an instruction will look like: "N_8735918103813_4195908_0"
     # So if there are two "_" in the hash, the node is an instruction. List nodes have
     # the letter 'L' appended to them. (Yeah, I LOL'd when I wrote this too.)
+    depth = name.count("_") - 2
     if 'L' in parent:
         parent_type = "list"
         name = name.replace('L', 'N') # reset node status
@@ -105,118 +173,142 @@ def ast_write_gql(args, name, il, level=0, edge=""):
     else:
         parent_type = "operation"
 
+    # get the instruction hash this node belongs in
+    inst_hash = "_".join(name.split('_')[:3])
+
+    # get the basic-block this node belongs in
+    inbb = "bb_{}_{}_{}".format(block.start, block.end-1, func_name)
+
     if isinstance(il, binja.MediumLevelILInstruction):
-        print('Il String: {}').format(il)
-        print('IL Size: {}').format(il.size)
 
         # instruction
         if level == 0:
-            print("-" * 50)
-            print("I  {}: {} ({}:{})").format(il.instr_index, str(il.operation).split('.')[1], block.start, block.end-1)
+            il_index =  il.instr_index
+            asm_address = hex(il.address).strip('L')
+            operation_type = str(il.operation).split('.')[1]
 
-            gql = "\nmatch\n"
-            gql += "$func_{0} isa function, has name \"{0}\"; \n".format(func_name)
-            gql += "$bb isa basic-block, has bb-start {}, has bb-end {}; \n".format(block.start, block.end-1)
-            gql += "(in-function: $func_{}, contains-basic-block: $bb) isa has-basic-block; \n".format(func_name)
-            gql += "\ninsert\n"
-            gql += "${} isa instruction, has hash \"{}\", has il-index {}, has asm-address \"0x{:x}\", has operation-type \"{}\", has ins-text \"{}\";\n".format(name, name, il.instr_index, il.address, str(il.operation).split('.')[1], il)
-            gql += "(contains-instruction: ${}, in-basic-block: $bb) isa has-instruction; \n".format(name)
-            
-            if WRITE: gqlFile.write(gql)
-
+            for func in PM.functions:
+                for bb in func.basic_blocks:
+                    if bb.bb_name == inbb:
+                        # This next if statement is to avoid issues with MLIL_GOTO nodes
+                        # being placed in the wrong basic blocks. This is because all MLIL_GOTO
+                        # nodes have and asm_address of 0x0, so we leave them out of the insn_list global.
+                        # This also means, the same instruction can be added twice! So we need to check if
+                        # the same node already exists. If it does, we don't add it.
+                        if il_index >= bb.bb_start and il_index <= bb.bb_end:
+                            if operation_type == "MLIL_GOTO":
+                                if (inst_hash not in insn_list):
+                                    insn_list.append(inst_hash)
+                                else:
+                                    continue # don't add this again!
+                            bb.instructions.append(PMInstruction(inst_hash, il_index, asm_address, operation_type, inbb))
+                            
         # operation
         else:
-            print("O {}{} -> {}").format('    '*level, edge, str(il.operation).split('.')[1])
+            node_type = str(il.operation).split('.')[1]
+            edge_label = str(edge)
+            parent_hash = parent
 
-            gql = "\nmatch\n"
-            gql += "${0} isa {1}, has hash \"{0}\"; \n".format(parent, parent_type)
-            gql += "\ninsert\n"
-            gql += "${} isa {}, has hash \"{}\", has edge-label \"{}\";\n".format(name, str(il.operation).split('.')[1], name, edge)
-            gql += "(to-node: ${}, from-node: ${}) isa node-link; \n".format(name, parent)
-
-            if WRITE: gqlFile.write(gql)
-            
+            for func in PM.functions:
+                for bb in func.basic_blocks:
+                    for inst in bb.instructions:
+                        if inst.name == inst_hash:
+                            inst.nodes.append(PMOperation(name, depth, node_type, edge_label, parent_hash))
+                            
         # edge
         for i, o in enumerate(il.operands):
             try:
-                edge_label = il.ILOperations[il.operation][i][0]
+                edge_label = str(il.ILOperations[il.operation][i][0])
             except IndexError:
                 # Addresses issue in binja v1.1 stable with MLIL_SET_VAR_ALIASED 
                 # operations in the Python bindings. 
                 # See: https://github.com/Vector35/binaryninja-api/issues/787 
                 edge_label = "unimplemented"
             child_name = "{}_{}".format(name, i)
-            ast_write_gql(args, child_name, o, level+1, edge_label)
+            ast_build_json(args, child_name, o, level+1, edge_label)
             
-    # list of operands
+
+    # list of operands / nodes
     elif isinstance(il, list):
-        print "L {}{}: list (len: {})".format('    '*level, edge, len(il))
-
+        node_type = "list"
+        edge_label = str(edge)
+        parent_hash = parent
         name = name.replace('N', 'L') # list hashes have an 'L' prefix to distinguish from nodes ('N').
-        gql = "\nmatch\n"
-        gql += "${0} isa {1}, has hash \"{0}\"; \n".format(parent, parent_type)
-        gql += "\ninsert\n"
-        gql += "${0} isa list, has hash \"{0}\", has list-size {1}, has edge-label \"{2}\";\n".format(name, len(il), edge)
-        gql += "(to-node: ${}, from-node: ${}) isa node-link; \n".format(name, parent)
+        list_size = len(il)
 
-        if WRITE: gqlFile.write(gql)
+        for func in PM.functions:
+            for bb in func.basic_blocks:
+                for inst in bb.instructions:
+                    if inst.name == inst_hash:
+                        inst.nodes.append(PMNodeList(name, depth, node_type, edge_label, parent_hash, list_size))
+                        
 
+        # add elements from 
         for i, item in enumerate(il):
-            edge_label = i
+            edge_label = str(i)
             item_name = "{}_{}".format(name, i)
-            ast_write_gql(args, item_name, item, level+1, edge_label)
+            ast_build_json(args, item_name, item, level+1, edge_label)
             
     # end node
     else:
-
-        gql += "\nmatch\n"
-        gql += "${0} isa {1}, has hash \"{0}\"; \n".format(parent, parent_type)
-        gql += "\ninsert\n"
+        parent_hash = parent
+        edge_label = str(edge)
 
         # constant
         if isinstance(il, long):
-            (signed, ) = struct.unpack("l", struct.pack("L", il))
-            il_str = "{:d} ({:#x})".format(signed, il)
-            et = "C"
-            gql += "${0} isa constant, has hash \"{0}\", has constant-value \"{1}\", has edge-label \"{2}\";\n".format(name, il, edge)
-        
+            node_type = "constant"
+            constant_value = str(il)
+
+            for func in PM.functions:
+                for bb in func.basic_blocks:
+                    for inst in bb.instructions:
+                        if inst.name == inst_hash:
+                            inst.nodes.append(PMEndNodeConstant(name, depth, node_type, edge_label, parent_hash, constant_value))
+
+
         # SSAVariable (not using type information)
         elif isinstance(il, binja.mediumlevelil.SSAVariable):
-            il_str = "{}#{}".format(il.var, il.version)
-            et = "S"
-            var_type = il.var.type
+            node_type = "variable-ssa"
+            var = str(il.var)
+            version = il.version
+
+            var_type = str(il.var.type)
             var_size = vars_and_sizes.get(str(il.var), 4) 
             var_func = func_name
 
-            gql += "${0} isa variable-ssa, has hash \"{0}\", has var \"{1}\", has version {2}, has edge-label \"{3}\", has var-type \"{4}\", has var-size {5}, has var-func \"{6}\";\n".format(name, il.var, il.version, edge, var_type, var_size, var_func)
+            for func in PM.functions:
+                for bb in func.basic_blocks:
+                    for inst in bb.instructions:
+                        if inst.name == inst_hash:
+                            inst.nodes.append(PMEndNodeVarSSA(name, depth, node_type, edge_label, parent_hash, var, version, var_type, var_size, var_func))
+
 
         # Variable (contains more information than we currently use)
         elif isinstance(il, binja.function.Variable):
-            il_str = str(il)
-            et = "V"
-            var_type = il.type
-            var_size = vars_and_sizes.get(str(il), 4) 
-            var_func = func_name 
+            node_type = "variable"
+            var = str(il)
 
-            gql += "${0} isa variable, has hash \"{0}\", has var \"{1}\", has edge-label \"{2}\", has var-type \"{3}\", has var-size {4}, has var-func \"{5}\";\n".format(name, il, edge, var_type, var_size, var_func)
+            var_type = str(il.type)
+            var_size = vars_and_sizes.get(str(il), 4) 
+            var_func = func_name
+
+            for func in PM.functions:
+                for bb in func.basic_blocks:
+                    for inst in bb.instructions:
+                        if inst.name == inst_hash:
+                            inst.nodes.append(PMEndNodeVariable(name, depth, node_type, edge_label, parent_hash, var, var_type, var_size, var_func))
+
 
         # Unknown terminating node (this should not be reached)
         else:
-            print("A terminating node was encountered that was not expected: '{}'").format(type(il))
+            print "A terminating node was encountered that was not expected: '{}'".format(type(il))
             raise ValueError
 
-        gql += "(to-node: ${}, from-node: ${}) isa node-link; \n".format(name, parent)
 
-        print("E{}{}{} -> {}").format(et, '    '*level, edge, il_str)
-
-        if WRITE: gqlFile.write(gql)
-        
-
-def ast_name_elemet(args, il_type, il):
+def ast_name_element(args, il_type, il):
     h = hash(il)
     name = "N_{}_{}".format(h, il.address)
-    child_name = "{}c".format(name)
-    ast_write_gql(args, child_name, il)
+    ast_build_json(args, name, il)
 
 
 def ast_parse(args):
@@ -224,7 +316,7 @@ def ast_parse(args):
     block = args[1]
     insn = args[2]
 
-    print ("  function: {} (asm-addr: {})").format(func.name, hex(insn.address).strip('L'))
+    print "  function: {} (asm-addr: {})".format(func.name, hex(insn.address).strip('L'))
     lookup = defaultdict(lambda: defaultdict(list))
 
     for block in func.medium_level_il.ssa_form:
@@ -234,56 +326,28 @@ def ast_parse(args):
     for il_type in sorted(lookup):
         ils = lookup[il_type][insn.address]
         for il in sorted(ils):
-            ast_name_elemet(args, il_type, il)
+            ast_name_element(args, il_type, il)
+
 
 def process_edges(func):
+    func_name = (func.name).replace('.', '_')
+
     for block in func.medium_level_il.ssa_form:
         if len(block.outgoing_edges) > 0:
             for edge in block.outgoing_edges:
-                func_name = (func.name).replace('.', '_')
-                gql  = "\nmatch \n"
-                gql += "$func_{0} isa function, has name \"{0}\"; \n".format(func_name)
-                gql += "$frombb isa basic-block, has bb-end {}, has bb-start {}; \n".format(edge.source.end-1, edge.source.start)
-                gql += "$tobb   isa basic-block, has bb-end {}, has bb-start {}; \n".format(edge.target.end-1, edge.target.start)
-                gql += "(contains-basic-block: $frombb, in-function: $func_{}) isa has-basic-block; \n".format(func_name)
-                gql += "(contains-basic-block: $tobb, in-function: $func_{}) isa has-basic-block; \n".format(func_name)
-                gql += "\ninsert \n"
-                gql += "(from-basic-block: $frombb, to-basic-block: $tobb) isa basic-block-edge; \n"
-
-                if WRITE: gqlFile.write(gql)
+                source = "bb_{}_{}_{}".format(edge.source.start, edge.source.end-1, func_name)
+                target = "bb_{}_{}_{}".format(edge.target.start, edge.target.end-1, func_name)
+                for func in PM.functions:
+                    if func.func_name == func_name:
+                        func.bb_edges.append(PMBBEdge(source, target))
 
 
-def analyze(bv, func_list=[]):
-    processed = 0
-    list_len = len(func_list)
-
-    for func in bv.functions:
-        if list_len > 0 and func.name not in func_list: continue
-        process_function(func)
-        processed += 1
-
-        ## process basic blocks
-        for block in func.medium_level_il.ssa_form:
-            process_basic_block(func, block)
-
-            ## process instructions
-            for insn in block:
-                process_instruction(func, block, insn)
-
-        ## process basic block edges
-        # all edges need to exist in Grakn before we can do this
-        # because edges stemming from loops wont have an associated
-        # basic block inserted to create a relationship for.
-        process_edges(func)
-
-    if list_len > 0 and processed != list_len:
-        print("\nWARNGING: Not all functions you specified were found!")
-        print("We found and processed {} of the {} function(s) you specified.").format(processed, list_len)
-
-
-# Helper method for get_variable_sizes
-# Use this method to calculate var offset. var_90, __saved_edi -->   144, -1    
 def get_offset_from_var(var):
+    """
+    Helper for get_variable_sizes)_
+    Use this to calculate var offset. 
+        e.g. var_90, __saved_edi --> 144, -1
+    """
     instance = False
     i=0
 
@@ -315,9 +379,11 @@ def get_offset_from_var(var):
     return tmp, instance 
 
 
-# Accepts a string of stack variables, returns a dict of var names and sizes
-# Called from process_function
 def get_variable_sizes(stack):
+    """
+    Called from process_function. This function Accepts a string 
+    of stack variables and returns a dict of var names and sizes.
+    """
     prev_offset = 0
     offset = 0
     counter = 0
@@ -367,45 +433,65 @@ def get_variable_sizes(stack):
         
         var_dict.update({key:size})
         counter = counter+1
+
     return var_dict
 
 
-def pmanalyze(target, func_list):
-    global WRITE
-    global gqlFile
+def analyze(bv, func_list=[]):
 
-    PATH = abspath('.')
-    ontology_file = PATH + "/binja_mlil_ssa.ontology"
-    GRAQL = PATH + "/graql_files/" + basename(target)
+    list_len = len(func_list)
 
-    if WRITE:
-        try:
-            f = open('{}'.format(ontology_file), 'r')
-            ontology = f.read()
-            f.close
-        except IOError:
-            print("ERROR: Unable to read ontology file ('{}'). Exiting.").format(ontology_file)
-            return
+    ## process functions
+    for func in bv.functions:
+        if list_len > 0 and func.name not in func_list: continue
+        process_function(func)
 
-        try:
-            gqlFile = open("{}.graql".format(GRAQL), "w")
-        except IOError:
-            print("ERROR: Unable to open {}.graql for writing.").format(GRAQL)
-            return
+        ## process basic blocks
+        for block in func.medium_level_il.ssa_form:
+            process_basic_block(func, block)
 
-        gqlFile.write(ontology)
+            ## process instructions
+            for insn in block:
+                process_instruction(func, block, insn)
 
+        ## process basic block edges
+        # all edges need to exist in Grakn before we can do this
+        # because edges stemming from loops wont have an associated
+        # basic block inserted to create a relationship for.
+        process_edges(func)
+
+
+def main(target, func_list=[]):
+    global PM
+
+    PM = PaperMachete()
+
+    print "Invoking Binary Ninja and analyzing file: {}".format(target)
     bv = binja.BinaryViewType.get_view_of_file(target)
     analyze(bv, func_list)
-
-    if WRITE: gqlFile.close()
-    if WRITE: print("\nGraql file '{}.graql' is ready.\n").format(basename(target))
-
+    
+    # pretty printed json (pretty printed files are much larger than compact files!)
+    target_json = json.dumps(PM, default=lambda o: o.__dict__, indent=4, sort_keys=True)
+    
+    # compact / minified json
+    #target_json = json.dumps(PM, default=lambda o: o.__dict__)
+    
+    try:
+        jf = None
+        if __name__ == "__main__":
+            jf = open("{}.json".format(basename(target)), "w")
+        else:
+            jf = open(join("analysis", "{}.json".format(basename(target))), "w")
+        jf.write(target_json)
+        jf.close()
+    except IOError:
+        print "ERROR: Unable to open/write to {}.json.".format(basename(target))
+        return
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         target = sys.argv[1]
         func_list = sys.argv[2:]
-        pmanalyze(target, func_list)
     else:
-        print("Usage: {} <binary> [function1 function2 ...]").format(sys.argv[0])
+        print "Usage: %s <binary> [function1 function2 ...]" % sys.argv[0]
+    main(target, func_list)

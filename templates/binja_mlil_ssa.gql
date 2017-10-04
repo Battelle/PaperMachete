@@ -3,7 +3,7 @@ insert
 ## ENTITIES #####################################
 function sub entity
 	plays in-function
-	has name
+	has func-name
 	has asm-address
 	has stack;
 
@@ -12,6 +12,7 @@ basic-block sub entity
 	plays to-basic-block
 	plays in-basic-block 
 	plays contains-basic-block
+	has bb-name
 	has bb-start
 	has bb-end;
 
@@ -20,31 +21,35 @@ instruction sub entity
 	plays to-node
 	plays in-instruction
 	plays contains-instruction
-	has hash
+	has name
 	has il-index
 	has asm-address
 	has ins-text
-	has operation-type;
+	has operation-type
+	has in-bb;
 
 operation sub entity
 	plays from-node
 	plays to-node
 	plays in-operation
 	plays contains-operation
-	has hash
+	has name
+	has parent-hash
 	has edge-label;
 
 constant sub entity
 	plays from-node
 	plays to-node
-	has hash
+	has name
+	has parent-hash
 	has constant-value
 	has edge-label;
 
 variable sub entity
 	plays from-node
 	plays to-node
-	has hash
+	has name
+	has parent-hash
 	has var
 	has edge-label
 	has var-type
@@ -55,7 +60,8 @@ variable-ssa sub entity
 	plays from-node
 	plays to-node
 	plays trace
-	has hash
+	has name
+	has parent-hash
 	has var
 	has version
 	has edge-label
@@ -66,7 +72,8 @@ variable-ssa sub entity
 list sub entity
 	plays from-node
 	plays to-node
-	has hash
+	has name
+	has parent-hash
 	has list-size
 	has edge-label;
 
@@ -79,8 +86,7 @@ MLIL_SET_VAR_FIELD sub operation;
 MLIL_SET_VAR_SPLIT sub operation;
 MLIL_LOAD sub operation;
 MLIL_STORE sub operation;
-MLIL_VAR sub operation
-	has var;
+MLIL_VAR sub operation;
 MLIL_VAR_FIELD sub operation;
 MLIL_ADDRESS_OF sub operation;
 MLIL_ADDRESS_OF_FIELD sub operation;
@@ -170,13 +176,16 @@ MLIL_MEM_PHI sub operation;
 
 ## RESOURCES (has) ##############################
 stack			sub resource datatype string;
-operation-type 		sub resource datatype string;
+operation-type 	sub resource datatype string;
 ins-text		sub resource datatype string;
+func-name		sub resource datatype string;
+bb-name			sub resource datatype string;
 name			sub resource datatype string;
-asm-address 		sub resource datatype string;
+in-bb			sub resource datatype string;
+asm-address 	sub resource datatype string;
 edge-label 		sub resource datatype string;
-constant-value 		sub resource datatype string;
-hash 			sub resource datatype string;
+constant-value 	sub resource datatype string;
+parent-hash 	sub resource datatype string;
 var 			sub resource datatype string;
 var-type 		sub resource datatype string;
 var-func 		sub resource datatype string;
@@ -194,22 +203,18 @@ if-false 		sub resource datatype long;
 
 ## ROLES (plays) ################################
 in-function 			sub role;
-
 from-basic-block 		sub role;
 to-basic-block			sub role;
 in-basic-block 			sub role;
 contains-basic-block 	sub role;
-
 in-instruction 			sub role;
 contains-instruction 	sub role;
-
 in-operation 			sub role;
 contains-operation 		sub role;
-
 from-node 				sub role;
 to-node					sub role;
-
 trace					sub role;
+
 ## RELATIONS ####################################
 has-basic-block sub relation
 	relates in-function
@@ -243,6 +248,7 @@ trace-instruction sub relation
 
 trace-full sub relation
 	relates trace;
+
 ## INFERRENCE RULES #############################
 $share-var isa inference-rule
 when {
@@ -253,6 +259,7 @@ when {
 then {
 	(trace:$v1, trace:$v2) isa trace-link;
 };
+
 $share-instruction isa inference-rule
 when {
 	$v1 isa variable-ssa;
@@ -269,6 +276,7 @@ when {
 then {
 	(trace:$v1, trace:$v4) isa trace-instruction;
 };
+
 $trace-goal isa inference-rule
 when {
 	(trace:$v1,trace:$v2) isa trace-link;

@@ -12,7 +12,6 @@
 
 import sys
 from grakn.client import Graph
-graph = Graph(uri='http://localhost:4567', keyspace='grakn')
 
 #Exits script
 def fail():
@@ -49,8 +48,11 @@ def query6(reg_type, reg):
     result = graph.execute('match $inst isa instruction, has asm-address $adr;$var isa '+ reg_type + ', id "' + reg + '";($inst, $var);select $adr;offset 0;')
     return result
 
-def main():
-    #Find possible arrays
+def main(keyspace):
+    global graph
+    graph = Graph(uri='http://localhost:4567', keyspace=keyspace)
+
+    # Find possible arrays
     array = []
     q1 = query1()
     if q1:
@@ -61,7 +63,7 @@ def main():
     else:
         fail()
 
-    #Find loops involving the array
+    # Find loops involving the array
     block = []
     q2 = query2()
     if q2:
@@ -73,7 +75,7 @@ def main():
     else:
         fail()
     
-    #Do the 'loop' blocks contain if statements?
+    # Do the 'loop' blocks contain if statements?
     if_id = []
     block2 = block.copy()
     for item in block2:
@@ -81,7 +83,7 @@ def main():
         if not q3:
             block.remove(item)
 
-    #Find the loop counters
+    # Find the loop counters
     var, version, var_id, reg, reg_type, block2 = [], [], [], [], [], block.copy()
     for entry in block2:
         q4 = query4(entry)
@@ -98,7 +100,7 @@ def main():
             block.remove(entry)
     i = len(var) - 1
 
-    #Find is the bounds of the loop counter are checked
+    # Find is the bounds of the loop counter are checked
     var2 = []
     q5 = query5()
     i = 0
@@ -106,7 +108,7 @@ def main():
         var2.append(q5[i]['var']['value'])
         i += 1
     
-    #Any variables in var[] but not var2[] are potential vulnerabilities
+    # Any variables in var[] but not var2[] are potential vulnerabilities
     i = 0
     for entry in var:
         if entry not in var2:
@@ -115,5 +117,8 @@ def main():
         i += 1
 
 if __name__ == "__main__":
-    main()
-
+    if len(sys.argv) > 1:
+        keyspace = sys.argv[1]
+    else:
+        keyspace = "grakn"
+    main(keyspace)
