@@ -465,9 +465,13 @@ def main(target, func_list=[]):
     global PM
 
     PM = PaperMachete()
-
+    
     print "Invoking Binary Ninja and analyzing file: {}".format(target)
     bv = binja.BinaryViewType.get_view_of_file(target)
+    bv.add_analysis_option('linearsweep')
+    print "Performing linear sweep..."
+    bv.update_analysis_and_wait()
+    print "Linear sweep complete. Collecting BNIL data..."
     analyze(bv, func_list)
     
     # pretty printed json (pretty printed files are much larger than compact files!)
