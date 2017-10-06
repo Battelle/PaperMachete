@@ -1,7 +1,7 @@
 import sys
 import json
 from struct import pack, unpack
-from os.path import basename, join
+from os.path import basename, join, isfile
 from operator import attrgetter
 from collections import defaultdict
 import binaryninja as binja
@@ -466,6 +466,10 @@ def main(target, func_list=[]):
 
     PM = PaperMachete()
     
+    if not isfile(target):
+        print "The specified target '{}' is not a file. Try again.".format(target)
+        return
+
     print "Invoking Binary Ninja and analyzing file: {}".format(target)
     bv = binja.BinaryViewType.get_view_of_file(target)
     bv.add_analysis_option('linearsweep')
