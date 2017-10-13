@@ -32,7 +32,7 @@ def main(keyspace):
         # Pull any instructions that use printf and don't use a modifier (have var type and not data type)
         func_addr = int(printf_func['a']['value'], 16)
         print("Scanning address {}".format(hex(func_addr)))
-        query2 = 'match $x isa instruction, has operation-type "MLIL_CALL_SSA", has asm-address $a; $y isa "MLIL_CONST_PTR"; ($x,$y); $z isa constant, has constant-value {}; ($y,$z); $l isa list, has list-size 1; ($x,$l); $s isa "MLIL_VAR_SSA"; ($l,$s); offset 0; limit 100; select $x, $a;'.format(func_addr)
+        query2 = 'match $x isa instruction, has operation-type "MLIL_CALL_SSA", has asm-address $a; $y isa "MLIL_CONST_PTR"; ($x,$y); $z isa constant, has constant-value {}; ($y,$z); $l isa list, has list-size 1; ($x,$l); $s isa "MLIL_VAR_SSA"; ($l,$s); offset 0; limit 500; select $x, $a;'.format(func_addr)
         result2 = graph.execute(query2)
         
         # If there is an instruction that uses printf without modifier, output instruction 
