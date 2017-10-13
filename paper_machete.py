@@ -14,11 +14,25 @@ configParser.read('config')
 GRAKN = configParser.get('PATHS', 'GRAKN') 
 ANALYSIS = join(MACHETE, "analysis")
 
+MAX_ACTIVE = 25     # migration knob: max number of migration workers running at once
+MAX_BATCHES = 500   # migration knob: max number of rows to execute in one transation
+
 MENU1 = "[1] Analyze a binary file"
 MENU2 = "[2] Migrate a JSON file into Grakn"
 MENU3 = "[3] Run all CWE queries"
 MENU4 = "[4] Clean and restart Grakn"
 MENU5 = "[5] Quit"
+
+TEMPLATE_DESC = [
+    '', # n/a
+    'Migrating functions.',                         # template 1
+    'Migrating basic-blocks.',                      # template 2
+    'Linking basic-blocks to their functions.',     # template 3
+    'Magrating instructions.',                      # template 4
+    'Linking instructions to their basic-blocks.',  # template 5
+    'Migrating all AST nodes.',                     # template 6
+    'Linking AST nodes.'                            # template 7
+]
 
 def print_banner(title=""):
     subprocess.call("clear")
@@ -184,17 +198,19 @@ def main():
                     break
             if json == "quit":
                 continue
-                
+            
             try:
                 # insert the ontology
                 print("Inserting ontology into 'grakn' keyspace...")
-                print("You'll see some inference rule data, that's normal.")
                 subprocess.call([join(GRAKN, "bin", "graql.sh"), "-f", join(MACHETE, "templates", "binja_mlil_ssa.gql"), "-k", "grakn"])
 
                 # migrate data into Grakn
                 print("\nMigrating data from '{}' into 'grakn' keyspace...".format(json))
-                print("This can take a while, so please wait! It will finish.")
-                subprocess.call([join(GRAKN, "bin", "migration.sh"), "json", "--template", join(MACHETE, "templates", "binja_mlil_ssa.tpl"), "--active", "1", "--batch", "1", "--input", join(ANALYSIS, json), "--keyspace", "grakn"])
+
+                # loop over all 7 templates
+                for num in range(1,8):
+                    print(">> Migration step {} of 7: {}".format(num, TEMPLATE_DESC[num]))
+                    subprocess.call([join(GRAKN, "bin", "migration.sh"), "json", "--template", join(MACHETE, "templates", "binja_mlil_ssa_{}.tpl".format(num)), "--active", "{}".format(MAX_ACTIVE), "--batch", "{}".format(MAX_BATCHES), "--input", join(ANALYSIS, json), "--keyspace", "grakn"])
 
                 print('Data successfully migrated into Grakn. You can now run CWE scripts to check for vulnerabilities')
                 raw_input(ENTER)
