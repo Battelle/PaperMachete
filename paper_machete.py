@@ -72,11 +72,11 @@ def get_file_selection(types):
             filtered.append(file)
         elif types == "bin":
             filecmd = (subprocess.check_output(["file", join(ANALYSIS, file)])).lower()
-            if "executable" in filecmd or "shared object" in filecmd:
+            if "elf" in filecmd or "mach-o" in filecmd or "pe" in filecmd or ".bndb" in file.lower():
                 filtered.append(file)
         else:
             pass # not json or executable binary
-    
+        
     # print file choices
     if len(filtered) == 0:
         if types == "json":
