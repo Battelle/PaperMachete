@@ -10,7 +10,7 @@ import pmanalyze
 
 ENTER = '\nPress ENTER to continue'
 MACHETE = abspath('.')
-script_path = join(MACHETE, "queries")
+query_path = join(MACHETE, "queries")
 configParser = RawConfigParser()
 configParser.read('config')
 GRAKN = configParser.get('PATHS', 'GRAKN') 
@@ -53,30 +53,30 @@ def print_banner(title=""):
     else:
         print("{}\n".format("=" * total_len))
 
-def run_script(script_path, script):
+def run_script(query_path, query, keyspace):
     try:
-        subprocess.call(["python3.6", join(script_path, script)])
+        subprocess.call(["python3.6", join(query_path, query), keyspace])
     except OSError:
         print("It looks like you don't have Python3.6 installed. " \
             "The Grakn Python driver requires it.")
         return -1
     return 0
 
-def run(script):
-    if script == 'all_scripts':
-        print("Running all CWE queries against the 'grakn' keyspace...")
-        scripts = [f for f in listdir(script_path) if isfile(join(script_path, f))]
-        for script in scripts:
-            if ".py" not in script: continue
-            if run_script(script_path, script): return
-            print("Script " + script + " complete.")
-        print("All scripts complete.")
+def run_queries(query, keyspace):
+    if query == 'all_queries':
+        print("Running all CWE queries against the '{}' keyspace...".format(keyspace))
+        queries = [f for f in listdir(query_path) if isfile(join(query_path, f))]
+        for query in queries:
+            if ".py" not in query: continue
+            if run_script(query_path, query, keyspace): return
+            print("Script " + query + " complete.")
+        print("All queries complete.")
     else:
-        if isfile(join(script_path, script)):
-            if run_script(script_path, script): return
+        if isfile(join(query_path, query)):
+            if run_script(query_path, query, keyspace): return
         else:
-            print("Could not find the python script " + script)
-            print("Please make sure it is located in " + script_path)
+            print("Could not find the python script " + query)
+            print("Please make sure it is located in " + query_path)
         return
 
 
@@ -230,7 +230,7 @@ def main():
                     print(">> Migration step {} of 7: {}".format(num, TEMPLATE_DESC[num]))
                     subprocess.call([join(GRAKN, "bin", "migration.sh"), "json", "--template", join(MACHETE, "templates", "binja_mlil_ssa_{}.tpl".format(num)), "--active", "{}".format(MAX_ACTIVE), "--batch", "{}".format(MAX_BATCHES), "--input", join(ANALYSIS, json), "--keyspace", keyspace])
 
-                print("Data successfully migrated into Grakn. You can now run CWE scripts against '{}' to check for vulnerabilities".format(keyspace))
+                print("Data successfully migrated into Grakn. You can now run CWE query scripts against '{}' to check for vulnerabilities".format(keyspace))
                 raw_input(ENTER)
             except:
                 print("Upload failed... please try agin.")
@@ -238,7 +238,26 @@ def main():
 
         # run CWE queries
         elif menu_option == 3:
-            run('all_scripts')
+            keyspace = None
+            keyspaces = literal_eval(urlopen('http://127.0.0.1:4567/keyspaces').read())
+
+            print_banner(MENU3)
+
+            for i, ks in enumerate(keyspaces):
+                print("[{}] {}".format(i, ks))
+
+            index = raw_input("\nSelect a keyspace to run all queries against ([q]uit): ").lower()
+            if index == "q" or index == "quit":
+                continue
+
+            try:
+                index = int(index)
+                if index in range(0, len(keyspaces)):
+                    keyspace = keyspaces[int(index)]
+            except ValueError:
+                continue
+
+            run_queries('all_queries', keyspace)
             raw_input(ENTER)
 
         # clean and restart Grakn
