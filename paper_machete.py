@@ -4,6 +4,8 @@ from os import listdir
 from os.path import abspath, isdir, isfile, join, splitext
 from ConfigParser import RawConfigParser
 from mimetypes import guess_type
+from urllib2 import urlopen
+from ast import literal_eval
 import pmanalyze
 
 ENTER = '\nPress ENTER to continue'
@@ -103,7 +105,7 @@ def get_file_selection(types):
         for i, file in enumerate(filtered):
             print "[{}] {}".format(i, file)
 
-    index = raw_input('\nSelect a file number to analyze ([q]uit): ').lower()
+    index = raw_input("\nSelect a file number to analyze ([q]uit): ").lower()
     if index == "q" or index == "quit":
         return "quit"
     
@@ -135,17 +137,17 @@ def main():
         # check directories	
         if not isdir(GRAKN):
             if GRAKN == '':
-                print('Please set the path to your Grakn installation in the config file.\n')
-                print('Open the file called \'config\' in your paper machete folder, and set')
-                print('the variable \'GRAKN\' to the full file path of your Grakn installation.')
+                print("Please set the path to your Grakn installation in the config file.\n")
+                print("Open the file called 'config' in your paper machete folder, and set")
+                print("the variable 'GRAKN' to the full file path of your Grakn installation.")
             else:
-                print('Grakn directory not found\n')
-                print('Please ensure grakn is located in ' + GRAKN)
+                print("Grakn directory not found\n")
+                print("Please ensure grakn is located in {}".format(GRAKN))
             sys.exit()
         
         if not isdir(MACHETE):
-            print('Paper Machete directory not found')
-            print('Please ensure Paper Machete is located in ' + MACHETE)
+            print("Paper Machete directory not found")
+            print("Please ensure Paper Machete is located in {}".format(MACHETE))
             sys.exit()
 
         if not isdir(ANALYSIS):
@@ -199,23 +201,39 @@ def main():
             if json == "quit":
                 continue
             
+            # check to see if the keyspace already exists for this file
+            try:
+                keyspace = json.lower().replace('.json', '')
+                keyspaces = literal_eval(urlopen('http://127.0.0.1:4567/keyspaces').read())
+                
+                inc = 1
+                finding_name = True
+                while finding_name:
+                    inc += 1
+                    if keyspace not in keyspaces:
+                        finding_name = False # keyspace name is not in use
+                    else:
+                        keyspace = "{}_{}".format(keyspace, inc) # add a _# suffix and try again
+            except:
+                print("Unable to query keyspace names. Is Grakn running?\nContinuing assuming keyspace '{}' is OK to use.".format(keyspace))
+                
             try:
                 # insert the ontology
-                print("Inserting ontology into 'grakn' keyspace...")
-                subprocess.call([join(GRAKN, "bin", "graql.sh"), "-f", join(MACHETE, "templates", "binja_mlil_ssa.gql"), "-k", "grakn"])
+                print("Inserting ontology into the '{}' keyspace...".format(keyspace))
+                subprocess.call([join(GRAKN, "bin", "graql.sh"), "-f", join(MACHETE, "templates", "binja_mlil_ssa.gql"), "-k", keyspace])
 
                 # migrate data into Grakn
-                print("\nMigrating data from '{}' into 'grakn' keyspace...".format(json))
+                print("\nMigrating data from '{}' into the '{}' keyspace...".format(json, keyspace))
 
                 # loop over all 7 templates
                 for num in range(1,8):
                     print(">> Migration step {} of 7: {}".format(num, TEMPLATE_DESC[num]))
-                    subprocess.call([join(GRAKN, "bin", "migration.sh"), "json", "--template", join(MACHETE, "templates", "binja_mlil_ssa_{}.tpl".format(num)), "--active", "{}".format(MAX_ACTIVE), "--batch", "{}".format(MAX_BATCHES), "--input", join(ANALYSIS, json), "--keyspace", "grakn"])
+                    subprocess.call([join(GRAKN, "bin", "migration.sh"), "json", "--template", join(MACHETE, "templates", "binja_mlil_ssa_{}.tpl".format(num)), "--active", "{}".format(MAX_ACTIVE), "--batch", "{}".format(MAX_BATCHES), "--input", join(ANALYSIS, json), "--keyspace", keyspace])
 
-                print('Data successfully migrated into Grakn. You can now run CWE scripts to check for vulnerabilities')
+                print("Data successfully migrated into Grakn. You can now run CWE scripts against '{}' to check for vulnerabilities".format(keyspace))
                 raw_input(ENTER)
             except:
-                print('Upload failed... please try agin.')
+                print("Upload failed... please try agin.")
                 raw_input(ENTER)
 
         # run CWE queries
@@ -225,7 +243,7 @@ def main():
 
         # clean and restart Grakn
         elif menu_option == 4:
-            print('Restarting Grakn. Press \"Y\" when prompted.\nWait until you see the Grakn banner before continuing!')
+            print("Restarting Grakn. Press \"Y\" when prompted.\nWait until you see the Grakn banner before continuing!")
             raw_input(ENTER)
             subprocess.call([join(GRAKN, "bin", "grakn.sh"), "clean"])
             subprocess.call([join(GRAKN, "bin", "grakn.sh"), "start"])
