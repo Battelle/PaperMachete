@@ -88,6 +88,7 @@ def get_file_selection(types):
             filtered.append(file)
         elif types == "bin":
             filecmd = (subprocess.check_output(["file", join(ANALYSIS, file)])).lower()
+            filecmd = filecmd.split(": ")[1] # remove file path returned by 'file' utility
             if "elf" in filecmd or "mach-o" in filecmd or "pe" in filecmd or ".bndb" in file.lower():
                 filtered.append(file)
         else:
