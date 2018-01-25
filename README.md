@@ -61,5 +61,5 @@ Once you've analyzed files with `[1]` and produced resulting JSON files, they wi
 
 Now that you have data in Grakn, you can use option `[3]`. This will kick off all scripts in `/queries` against the keyspace of your choice. If you write your own query patterns, just throw them in `/queries` and option `[3]` will run them too.
 
-## Checkout the talk from DerbyCon
+## Check out the talk from DerbyCon
 https://youtu.be/OsRQEHmGUMk?t=1665
