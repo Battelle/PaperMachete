@@ -60,3 +60,6 @@ Option `[1]` lists all executable files in the `/analysis` directory. So place a
 Once you've analyzed files with `[1]` and produced resulting JSON files, they will appear as a choice in option `[2]`. Selecting a JSON file in option `[2]` will migrate the data into Grakn.
 
 Now that you have data in Grakn, you can use option `[3]`. This will kick off all scripts in `/queries` against the keyspace of your choice. If you write your own query patterns, just throw them in `/queries` and option `[3]` will run them too.
+
+## Checkout the talk from DerbyCon
+https://youtu.be/OsRQEHmGUMk?t=1665
