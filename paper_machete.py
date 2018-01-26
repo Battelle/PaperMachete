@@ -183,9 +183,10 @@ def main():
                 print("File '{}' not found.".format(binary))
             else:
                 functions = str(raw_input('Specify a list of functions examine seperated by spaces (ENTER for all): ')).split()
-                if functions == "":
+                if len(functions) == 0:
                     pmanalyze.main(join(ANALYSIS, binary))
                 else:
+                    print functions
                     pmanalyze.main(join(ANALYSIS, binary), functions)
             raw_input(ENTER)
             
