@@ -30,7 +30,7 @@ TEMPLATE_DESC = [
     'Migrating functions.',                         # template 1
     'Migrating basic-blocks.',                      # template 2
     'Linking basic-blocks to their functions.',     # template 3
-    'Magrating instructions.',                      # template 4
+    'Migrating instructions.',                      # template 4
     'Linking instructions to their basic-blocks.',  # template 5
     'Migrating all AST nodes.',                     # template 6
     'Linking AST nodes.'                            # template 7
