@@ -206,7 +206,7 @@ def main():
             # check to see if the keyspace already exists for this file
             try:
                 keyspace = json.lower().replace('.json', '')
-                keyspaces = literal_eval(urlopen('http://127.0.0.1:4567/keyspaces').read())
+                keyspaces = literal_eval(urlopen('http://127.0.0.1:4567/keyspace').read())
                 
                 inc = 1
                 finding_name = True
@@ -222,7 +222,7 @@ def main():
             try:
                 # insert the ontology
                 print("Inserting ontology into the '{}' keyspace...".format(keyspace))
-                subprocess.call([join(GRAKN, "bin", "graql.sh"), "-f", join(MACHETE, "templates", "binja_mlil_ssa.gql"), "-k", keyspace])
+                subprocess.call([join(GRAKN,"bin","graql.sh"), "-f", join(MACHETE, "templates", "binja_mlil_ssa.gql"), "-k", keyspace])
 
                 # migrate data into Grakn
                 print("\nMigrating data from '{}' into the '{}' keyspace...".format(json, keyspace))
