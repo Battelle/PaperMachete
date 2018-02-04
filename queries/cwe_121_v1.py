@@ -41,7 +41,6 @@ def main(keyspace):
         
         # If the function is found continue query
         if result1: 
-            print("Found function {}".format(function_name)) 
             # Get all instructions that have function name
             func_addr = int(result1[0]['a']['value'], 16)
             query2 = 'match $x has operation-type "MLIL_CALL_SSA"; $y isa"MLIL_CONST_PTR"; ($x,$y); $z isa constant, has constant-value {}; ($y,$z); get $x;'.format(func_addr)
@@ -49,11 +48,9 @@ def main(keyspace):
             
             # If there are instructions that use the function check the instructions 
             if result2:
-                print("Found instructions")
 
                 buff_index = functions[function_name][0]
                 size_index = functions[function_name][1]
-                print("BI:{}, SI:{}".format(buff_index,size_index)) 
                 for instr in result2:
                     Id = instr['x']['id']
                     query3 = 'match $x id "' + Id + '"; $l isa list; ($x,$l); (from-node: $l, $q); $q has edge-label $e; (from-node: $q, $v); {$v has var $s;} or {$v has constant-value $s;}; get $e, $s;'
@@ -66,7 +63,6 @@ def main(keyspace):
                         index = int(ele['e']['value'])
                         val = ele['s']['value']
                         param_array[index] = val
-                    print(param_array)
                     # Get var name - This is done to determine how many bytes the variable is
                     var_name = param_array[buff_index]
                     var_name = var_name.split('#',1)[0].lstrip()
@@ -78,7 +74,6 @@ def main(keyspace):
                         buff_size = int(param_array[size_index])
                     except ValueError as err:
                         continue
-                    print("buf size{}".format(buff_size))
                     # Get size of string in by finding initialization Ex. var_88 = &var_58        
                     # Find where string is initialzed
                     query4 = 'match $x id "{}"; $y isa basic-block; ($x,$y); $z isa instruction, has operation-type "MLIL_SET_VAR_SSA"; ($y,$z); {{$v1 isa variable, has var "{}";}} or {{$v1 isa variable-ssa, has var "{}";}}; ($z, $v1); $w isa MLIL_ADDRESS_OF; ($w, $z); $v isa variable, has var-size $s; ($w, $v); get $s, $x;'.format(Id, var_name, var_name)
@@ -86,7 +81,6 @@ def main(keyspace):
                     
                     if (result4):
                         string_size = result4[0]['s']['value']
-                        print("String_size:{}".format(string_size))
                         # Finally Determine if buffer size == sizeof(str)
                         if string_size != buff_size:
                             instruction_ID = result4[0]['x']['id']
