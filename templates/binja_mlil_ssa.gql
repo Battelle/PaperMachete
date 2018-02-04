@@ -1,4 +1,4 @@
-insert 
+define 
 
 ## ENTITIES #####################################
 function sub entity
@@ -174,31 +174,31 @@ MLIL_VAR_PHI sub operation;
 MLIL_MEM_PHI sub operation;
 
 
-## RESOURCES (has) ##############################
-stack			sub resource datatype string;
-operation-type 	sub resource datatype string;
-ins-text		sub resource datatype string;
-func-name		sub resource datatype string;
-bb-name			sub resource datatype string;
-name			sub resource datatype string;
-in-bb			sub resource datatype string;
-asm-address 	sub resource datatype string;
-edge-label 		sub resource datatype string;
-constant-value 	sub resource datatype string;
-parent-hash 	sub resource datatype string;
-var 			sub resource datatype string;
-var-type 		sub resource datatype string;
-var-func 		sub resource datatype string;
-var-size		sub resource datatype long;
-bb-start		sub resource datatype long;
-bb-end			sub resource datatype long;
-il-index 		sub resource datatype long;
-list-size 		sub resource datatype long;
-int 			sub resource datatype long;
-version 		sub resource datatype long;
-size			sub resource datatype long;
-if-true 		sub resource datatype long;
-if-false 		sub resource datatype long;
+## Attribute (has) ##############################
+stack			sub attribute datatype string;
+operation-type 	sub attribute datatype string;
+ins-text		sub attribute datatype string;
+func-name		sub attribute datatype string;
+bb-name			sub attribute datatype string;
+name			sub attribute datatype string;
+in-bb			sub attribute datatype string;
+asm-address 	sub attribute datatype string;
+edge-label 		sub attribute datatype string;
+constant-value 	sub attribute datatype string;
+parent-hash 	sub attribute datatype string;
+var 			sub attribute datatype string;
+var-type 		sub attribute datatype string;
+var-func 		sub attribute datatype string;
+var-size		sub attribute datatype long;
+bb-start		sub attribute datatype long;
+bb-end			sub attribute datatype long;
+il-index 		sub attribute datatype long;
+list-size 		sub attribute datatype long;
+int 			sub attribute datatype long;
+version 		sub attribute datatype long;
+size			sub attribute datatype long;
+if-true 		sub attribute datatype long;
+if-false 		sub attribute datatype long;
 
 
 ## ROLES (plays) ################################
@@ -215,42 +215,42 @@ from-node 				sub role;
 to-node					sub role;
 trace					sub role;
 
-## RELATIONS ####################################
-has-basic-block sub relation
+## RELATIONSHIP ####################################
+has-basic-block sub relationship
 	relates in-function
 	relates contains-basic-block;
 
-basic-block-edge sub relation
+basic-block-edge sub relationship
 	relates from-basic-block
 	relates to-basic-block;
 
-has-instruction sub relation
+has-instruction sub relationship
     relates contains-instruction
     relates in-basic-block;
 
-instruction-has-operation sub relation
+instruction-has-operation sub relationship
 	relates contains-operation
 	relates in-instruction;
 
-operation-has-operation sub relation
+operation-has-operation sub relationship
 	relates contains-operation
 	relates in-operation;
 
-node-link sub relation
+node-link sub relationship
 	relates from-node
 	relates to-node;
 
-trace-link sub relation
+trace-link sub relationship
 	relates trace;
 
-trace-instruction sub relation
+trace-instruction sub relationship
 	relates trace;
 
-trace-full sub relation
+trace-full sub relationship
 	relates trace;
 
 ## INFERRENCE RULES #############################
-$share-var isa inference-rule
+share-var sub rule
 when {
 	$v1 isa variable-ssa, has var $var;
 	$v2 isa variable-ssa, has var $var;
@@ -260,7 +260,7 @@ then {
 	(trace:$v1, trace:$v2) isa trace-link;
 };
 
-$share-instruction isa inference-rule
+share-instruction sub rule
 when {
 	$v1 isa variable-ssa;
 	$v2 isa MLIL_VAR_SSA;
@@ -277,7 +277,7 @@ then {
 	(trace:$v1, trace:$v4) isa trace-instruction;
 };
 
-$trace-goal isa inference-rule
+trace-goal sub rule
 when {
 	(trace:$v1,trace:$v2) isa trace-link;
 	(trace:$v2,trace:$v3) isa trace-instruction;
@@ -285,4 +285,5 @@ when {
 },
 then {
 	(trace:$v1, trace:$v3) isa trace-full;
-};    
+};   
+ 

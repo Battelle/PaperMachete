@@ -15,22 +15,22 @@
 #============================================================================================================
 
 import sys
-from grakn.client import Graph
+import grakn
 
 def main(keyspace):
-    graph = Graph(uri='http://localhost:4567', keyspace=keyspace)
+    graph = grakn.Client(uri='http://localhost:4567', keyspace=keyspace)
 
     # Check for gets() function
     # Get address of function to use for next query
     function_name = 'gets'
-    query1 = 'match $func isa function, has func-name contains "{}", has asm-address $a; select $a;'.format(function_name)
+    query1 = 'match $func isa function, has func-name contains "{}", has asm-address $a; get $a;'.format(function_name)
     result1 = graph.execute(query1)
     
     # If the function is found continue query
     if result1: 
         # Get all instructions that have function name
         func_addr = int(result1[0]['a']['value'], 16)
-        query2 = 'match $x has operation-type "MLIL_CALL_SSA" has asm-address $a; $y isa"MLIL_CONST_PTR"; ($x,$y); $z isa constant, has constant-value {}; ($y,$z); select $x, $a;'.format(func_addr)
+        query2 = 'match $x has operation-type "MLIL_CALL_SSA" has asm-address $a; $y isa"MLIL_CONST_PTR"; ($x,$y); $z isa constant, has constant-value {}; ($y,$z); get $x, $a;'.format(func_addr)
         result2 = graph.execute(query2)
         
         # If there are instructions that use the function check the instructions 

@@ -11,7 +11,7 @@
 #=======================================================================================
 
 import sys
-from grakn.client import Graph
+import grakn
 
 #Exits script
 def fail():
@@ -20,37 +20,37 @@ def fail():
 
 #Searches for potential array declarations
 def query1():
-    result = graph.execute('match $set isa instruction, has operation-type "MLIL_SET_VAR_SSA";$ptr isa MLIL_CONST_PTR;($set, $ptr);$reg isa variable-ssa, has var $index;($set, $reg);offset 0;')
+    result = graph.execute('match $set isa instruction, has operation-type "MLIL_SET_VAR_SSA";$ptr isa MLIL_CONST_PTR;($set, $ptr);$reg isa variable-ssa, has var $index;($set, $reg); get $index;')
     return result
 
 #Finds potential loops
 def query2():
-    result = graph.execute('match $block isa basic-block;($block, $inst);$inst isa instruction;$reg isa variable-ssa, has var $index, has edge-label "dest";($inst, $reg);offset 0;')
+    result = graph.execute('match $block isa basic-block;($block, $inst);$inst isa instruction;$reg isa variable-ssa, has var $index, has edge-label "dest";($inst, $reg);get $index, $block;')
     return result
 
 #Checks query2 for if statements    
 def query3(item):
-    result = graph.execute('match $block isa basic-block, id "' + item  + '";($block, $inst);$inst isa instruction, has operation-type "MLIL_IF";offset 0;')
+    result = graph.execute('match $block isa basic-block, id "' + item  + '";($block, $inst);$inst isa instruction, has operation-type "MLIL_IF";offset 0; get $inst;')
     return result
 
 #Finds and returns various information about the loops, including the counting variable 
 def query4(entry):
-    result = graph.execute('match $block isa basic-block, id "' + entry  + '";($block, contains-instruction:$inst);$inst isa instruction, has operation-type "MLIL_SET_VAR_SSA";($inst, to-node:$add);$add isa MLIL_ADD;$var isa MLIL_VAR_SSA;($add, $var);$const isa MLIL_CONST;($add, $const);$one isa constant has constant-value 1;($const, $one);$reg isa variable-ssa, has var $index, has version $version, has edge-label "dest";($inst, $reg);select $index, $reg, $version;offset 0;')
+    result = graph.execute('match $block isa basic-block, id "' + entry  + '";($block, contains-instruction:$inst);$inst isa instruction, has operation-type "MLIL_SET_VAR_SSA";($inst, to-node:$add);$add isa MLIL_ADD;$var isa MLIL_VAR_SSA;($add, $var);$const isa MLIL_CONST;($add, $const);$one isa constant has constant-value 1;($const, $one);$reg isa variable-ssa, has var $index, has version $version, has edge-label "dest";($inst, $reg);get $index, $reg, $version;')
     return result
 
 #Checks if the bounds on the counting varaible (array index) are ever checked   
 def query5():
-    result = graph.execute('match $block isa basic-block;$inst isa instruction, has operation-type "MLIL_IF";($block, $inst);{$comp isa MLIL_CMP_SGE;} or {$comp isa MLIL_CMP_SLE;} or {$comp isa MLIL_CMP_SLT;} or {$comp isa MLIL_CMP_SGT;} or {$comp isa MLIL_CMP_UGE;} or {$comp isa MLIL_CMP_ULE;} or {$comp isa MLIL_CMP_ULT;} or {$comp isa MLIL_CMP_UGT;};($inst, $comp);$reg isa MLIL_VAR_SSA;($comp, $reg);$index isa variable-ssa, has var $var, has version $version;($reg, $index);select $var, $version;offset 0; limit 60;')
+    result = graph.execute('match $block isa basic-block;$inst isa instruction, has operation-type "MLIL_IF";($block, $inst);{$comp isa MLIL_CMP_SGE;} or {$comp isa MLIL_CMP_SLE;} or {$comp isa MLIL_CMP_SLT;} or {$comp isa MLIL_CMP_SGT;} or {$comp isa MLIL_CMP_UGE;} or {$comp isa MLIL_CMP_ULE;} or {$comp isa MLIL_CMP_ULT;} or {$comp isa MLIL_CMP_UGT;};($inst, $comp);$reg isa MLIL_VAR_SSA;($comp, $reg);$index isa variable-ssa, has var $var, has version $version;($reg, $index);get $var, $version;')
     return result
 
 #Returns asm-address of vulnerability   
 def query6(reg_type, reg):
-    result = graph.execute('match $inst isa instruction, has asm-address $adr;$var isa '+ reg_type + ', id "' + reg + '";($inst, $var);select $adr;offset 0;')
+    result = graph.execute('match $inst isa instruction, has asm-address $adr;$var isa '+ reg_type + ', id "' + reg + '";($inst, $var);get $adr;')
     return result
 
 def main(keyspace):
     global graph
-    graph = Graph(uri='http://localhost:4567', keyspace=keyspace)
+    graph = grakn.Client(uri='http://localhost:4567', keyspace=keyspace)
 
     # Find possible arrays
     array = []
@@ -91,7 +91,8 @@ def main(keyspace):
             i = 0
             for item in q4:
                 reg.append(item['reg']['id'])
-                reg_type.append(item['reg']['isa'])
+                reg_type.append(item['reg']['type']['label'])
+                print(item['reg']['type']['label'])
                 var.append(item['index']['value'])
                 version.append(item['version']['value'])
                 var_id.append(item['index']['id'])

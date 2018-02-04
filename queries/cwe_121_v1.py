@@ -25,10 +25,10 @@
 #============================================================================================================
 
 import sys
-from grakn.client import Graph 
+import grakn 
 
 def main(keyspace):
-    graph = Graph(uri='http://localhost:4567', keyspace=keyspace)
+    graph = grakn.Client(uri='http://localhost:4567', keyspace=keyspace)
 
     # Functions with indexes for (dest, sizeof(dest)) stored in dict
     functions = {"receive_delim": (2,3), "fgets": (0,1), "strncpy": (0,2), "receive_until": (0,2), "memcpy": (0,2), "freaduntil": (1,2), "read":(1,2)}
@@ -36,7 +36,7 @@ def main(keyspace):
     # Check for potential vuln in each function
     for function_name in functions:
        # Get address of function to use for next query
-        query1 = 'match $func isa function, has func-name contains "{}", has asm-address $a; select $a;'.format(function_name)
+        query1 = 'match $func isa function, has func-name contains "{}", has asm-address $a; get $a;'.format(function_name)
         result1 = graph.execute(query1)
         
         # If the function is found continue query
@@ -44,7 +44,7 @@ def main(keyspace):
             print("Found function {}".format(function_name)) 
             # Get all instructions that have function name
             func_addr = int(result1[0]['a']['value'], 16)
-            query2 = 'match $x has operation-type "MLIL_CALL_SSA"; $y isa"MLIL_CONST_PTR"; ($x,$y); $z isa constant, has constant-value {}; ($y,$z); select $x;'.format(func_addr)
+            query2 = 'match $x has operation-type "MLIL_CALL_SSA"; $y isa"MLIL_CONST_PTR"; ($x,$y); $z isa constant, has constant-value {}; ($y,$z); get $x;'.format(func_addr)
             result2 = graph.execute(query2)
             
             # If there are instructions that use the function check the instructions 
@@ -56,7 +56,7 @@ def main(keyspace):
                 print("BI:{}, SI:{}".format(buff_index,size_index)) 
                 for instr in result2:
                     Id = instr['x']['id']
-                    query3 = 'match $x id "' + Id + '"; $l isa list; ($x,$l); (from-node: $l, $q); $q has edge-label $e; (from-node: $q, $v); {$v has var $s;} or {$v has constant-value $s;}; select $e, $s;'
+                    query3 = 'match $x id "' + Id + '"; $l isa list; ($x,$l); (from-node: $l, $q); $q has edge-label $e; (from-node: $q, $v); {$v has var $s;} or {$v has constant-value $s;}; get $e, $s;'
                     result3 = graph.execute(query3)
             
                     # This section grabs instrution params and insert into an array 
@@ -81,7 +81,7 @@ def main(keyspace):
                     print("buf size{}".format(buff_size))
                     # Get size of string in by finding initialization Ex. var_88 = &var_58        
                     # Find where string is initialzed
-                    query4 = 'match $x id "{}"; $y isa basic-block; ($x,$y); $z isa instruction, has operation-type "MLIL_SET_VAR_SSA"; ($y,$z); {{$v1 isa variable, has var "{}";}} or {{$v1 isa variable-ssa, has var "{}";}}; ($z, $v1); $w isa MLIL_ADDRESS_OF; ($w, $z); $v isa variable, has var-size $s; ($w, $v); offset 0; limit 30;offset 0; limit 30;'.format(Id, var_name, var_name)
+                    query4 = 'match $x id "{}"; $y isa basic-block; ($x,$y); $z isa instruction, has operation-type "MLIL_SET_VAR_SSA"; ($y,$z); {{$v1 isa variable, has var "{}";}} or {{$v1 isa variable-ssa, has var "{}";}}; ($z, $v1); $w isa MLIL_ADDRESS_OF; ($w, $z); $v isa variable, has var-size $s; ($w, $v); get $s, $x;'.format(Id, var_name, var_name)
                     result4 = graph.execute(query4)
                     
                     if (result4):
@@ -90,7 +90,7 @@ def main(keyspace):
                         # Finally Determine if buffer size == sizeof(str)
                         if string_size != buff_size:
                             instruction_ID = result4[0]['x']['id']
-                            query5 = 'match $i id {}, has asm-address $a; select $a;'.format(instruction_ID)
+                            query5 = 'match $i id {}, has asm-address $a; get $a;'.format(instruction_ID)
                             result5 = graph.execute(query5)
                             instr_addr = result5[0]['a']['value']
 

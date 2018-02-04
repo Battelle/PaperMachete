@@ -17,7 +17,7 @@
 #============================================================================================================
 
 import sys
-from grakn.client import Graph
+import grakn
 
 #Exits the script
 def fail():
@@ -25,25 +25,25 @@ def fail():
 
 #Finds comparisons that are acting as a lower boudns check
 def lowerCheck():
-    query = graph.execute('match {$comp isa MLIL_CMP_SGE;} or {$comp isa MLIL_CMP_SGT;};$node isa MLIL_VAR_SSA;$cons isa MLIL_CONST;($comp, $node);($comp, $cons);$varssa isa variable-ssa has var $var;($node, $varssa);select $comp, $var;offset 0;') 
+    query = graph.execute('match {$comp isa MLIL_CMP_SGE;} or {$comp isa MLIL_CMP_SGT;};$node isa MLIL_VAR_SSA;$cons isa MLIL_CONST;($comp, $node);($comp, $cons);$varssa isa variable-ssa has var $var;($node, $varssa);get $comp, $var;') 
     return query
 
 #Finds comparisons that are acting as an upper bounds check
 def upperCheck():
-    query = graph.execute('match {$comp isa MLIL_CMP_SLE;} or {$comp isa MLIL_CMP_SLT;};$node isa MLIL_VAR_SSA;$cons isa MLIL_CONST;($comp, $node);($comp, $cons);$varssa isa variable-ssa has var $var;($node, $varssa);select $comp, $var;offset 0;') 
+    query = graph.execute('match {$comp isa MLIL_CMP_SLE;} or {$comp isa MLIL_CMP_SLT;};$node isa MLIL_VAR_SSA;$cons isa MLIL_CONST;($comp, $node);($comp, $cons);$varssa isa variable-ssa has var $var;($node, $varssa);get $comp, $var;') 
     return query
 
 #Returns the addresss of a comparison instruction
 def get_addr(comp):
-    query = graph.execute('match $comp id "' + comp  + '";$inst isa instruction, has asm-address $addr;($comp, $inst);select $addr; offset 0;')
+    query = graph.execute('match $comp id "' + comp  + '";$inst isa instruction, has asm-address $addr;($comp, $inst);get $addr;')
     return query
 
 def main(keyspace):
     global graph
-    graph = Graph(uri='http://localhost:4567', keyspace=keyspace)
+    graph = grakn.Client(uri='http://localhost:4567', keyspace=keyspace)
 
     #Find a variable being compared
-    query1 = graph.execute('match {$comp isa MLIL_CMP_SGE;} or {$comp isa MLIL_CMP_SLE;} or {$comp isa MLIL_CMP_SLT;} or {$comp isa MLIL_CMP_SGT;};$node isa MLIL_VAR_SSA;$cons isa MLIL_CONST;($comp, $node);($comp, $cons);$varssa isa variable-ssa has var $var;($node, $varssa);select $comp, $var;offset 0;') 
+    query1 = graph.execute('match {$comp isa MLIL_CMP_SGE;} or {$comp isa MLIL_CMP_SLE;} or {$comp isa MLIL_CMP_SLT;} or {$comp isa MLIL_CMP_SGT;};$node isa MLIL_VAR_SSA;$cons isa MLIL_CONST;($comp, $node);($comp, $cons);$varssa isa variable-ssa has var $var;($node, $varssa);get $comp, $var;') 
 
     #Parse the output of query1 into the compare statements and varaible names
     comp, var = [], []

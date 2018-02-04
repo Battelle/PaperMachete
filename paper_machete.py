@@ -17,7 +17,7 @@ GRAKN = configParser.get('PATHS', 'GRAKN')
 ANALYSIS = join(MACHETE, "analysis")
 
 MAX_ACTIVE = 25     # migration knob: max number of migration workers running at once
-MAX_BATCHES = 500   # migration knob: max number of rows to execute in one transation
+MAX_BATCHES = 1000000000   # migration knob: max number of rows to execute in one transation
 
 MENU1 = "[1] Analyze a binary file"
 MENU2 = "[2] Migrate a JSON file into Grakn"
@@ -206,7 +206,7 @@ def main():
             # check to see if the keyspace already exists for this file
             try:
                 keyspace = json.lower().replace('.json', '')
-                keyspaces = literal_eval(urlopen('http://127.0.0.1:4567/keyspace').read())
+                keyspaces = literal_eval(urlopen('http://127.0.0.1:4567/kb').read())
                 
                 inc = 1
                 finding_name = True
@@ -222,7 +222,8 @@ def main():
             try:
                 # insert the ontology
                 print("Inserting ontology into the '{}' keyspace...".format(keyspace))
-                subprocess.call([join(GRAKN,"bin","graql.sh"), "-f", join(MACHETE, "templates", "binja_mlil_ssa.gql"), "-k", keyspace])
+                subprocess.call([join(GRAKN,"graql"),"console", "-f", join(MACHETE, "templates", "binja_mlil_ssa.gql"), "-k", keyspace])
+
 
                 # migrate data into Grakn
                 print("\nMigrating data from '{}' into the '{}' keyspace...".format(json, keyspace))
@@ -230,7 +231,7 @@ def main():
                 # loop over all 7 templates
                 for num in range(1,8):
                     print(">> Migration step {} of 7: {}".format(num, TEMPLATE_DESC[num]))
-                    subprocess.call([join(GRAKN, "bin", "migration.sh"), "json", "--template", join(MACHETE, "templates", "binja_mlil_ssa_{}.tpl".format(num)), "--active", "{}".format(MAX_ACTIVE), "--batch", "{}".format(MAX_BATCHES), "--input", join(ANALYSIS, json), "--keyspace", keyspace])
+                    subprocess.call([join(GRAKN, "graql"), "migrate", "json", "--template", join(MACHETE, "templates", "binja_mlil_ssa_{}.tpl".format(num)), "--input", join(ANALYSIS, json), "--keyspace", keyspace])
 
                 print("Data successfully migrated into Grakn. You can now run CWE query scripts against '{}' to check for vulnerabilities".format(keyspace))
                 raw_input(ENTER)
@@ -241,12 +242,12 @@ def main():
         # run CWE queries
         elif menu_option == 3:
             keyspace = None
-            keyspaces = literal_eval(urlopen('http://127.0.0.1:4567/keyspaces').read())
+            keyspaces = literal_eval(urlopen('http://127.0.0.1:4567/kb').read())['keyspaces']
 
             print_banner(MENU3)
 
             for i, ks in enumerate(keyspaces):
-                print("[{}] {}".format(i, ks))
+                print("[{}] {}".format(i, ks['name']))
 
             index = raw_input("\nSelect a keyspace to run all queries against ([q]uit): ").lower()
             if index == "q" or index == "quit":
@@ -255,7 +256,7 @@ def main():
             try:
                 index = int(index)
                 if index in range(0, len(keyspaces)):
-                    keyspace = keyspaces[int(index)]
+                    keyspace = keyspaces[int(index)]['name']
             except ValueError:
                 continue
 
