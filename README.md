@@ -25,7 +25,7 @@ The ability to write our own domain-specific ontologies lets us quickly experime
 While the end game for PM is to eliminate the need for human-written queries, the fact is we're starting from square one. Which means hand-jamming a lot queries to model the patterns human vulnerability researchers look for when bug hunting.
 
 ## Dependencies
-Paper Machete requires [BinaryNinja v1.1](https://binary.ninja), [Grakn v0.16.0](https://github.com/graknlabs/grakn/releases/tag/v0.16.0), the [Grakn Python Driver](http://github.com/graknlabs/grakn-python), and the [Java JRE](http://www.oracle.com/technetwork/java/javase/downloads/index.html)
+Paper Machete requires [BinaryNinja v1.1](https://binary.ninja), [Grakn v1.0.0](https://github.com/graknlabs/grakn/releases/tag/v1.0.0), the [Grakn Python Driver](http://github.com/graknlabs/grakn-python), and the [Java JRE](http://www.oracle.com/technetwork/java/javase/downloads/index.html)
 
 
 ## Query Scripts
@@ -60,6 +60,3 @@ Option `[1]` lists all executable files in the `/analysis` directory. So place a
 Once you've analyzed files with `[1]` and produced resulting JSON files, they will appear as a choice in option `[2]`. Selecting a JSON file in option `[2]` will migrate the data into Grakn.
 
 Now that you have data in Grakn, you can use option `[3]`. This will kick off all scripts in `/queries` against the keyspace of your choice. If you write your own query patterns, just throw them in `/queries` and option `[3]` will run them too.
-
-## Check out the talk from DerbyCon
-https://youtu.be/OsRQEHmGUMk?t=1665
