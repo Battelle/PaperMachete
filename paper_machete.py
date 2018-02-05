@@ -267,8 +267,10 @@ def main():
         elif menu_option == 4:
             print("Restarting Grakn. Press \"Y\" when prompted.\nWait until you see the Grakn banner before continuing!")
             raw_input(ENTER)
-            subprocess.call([join(GRAKN, "bin", "grakn.sh"), "clean"])
-            subprocess.call([join(GRAKN, "bin", "grakn.sh"), "start"])
+            
+            subprocess.call([join(GRAKN, "grakn"), "server", "stop"])
+            subprocess.call([join(GRAKN, "grakn"), "server", "clean"])
+            subprocess.call([join(GRAKN, "grakn"), "server", "start"])
             
         # quit
         elif menu_option == 5:
